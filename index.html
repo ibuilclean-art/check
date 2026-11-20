@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ペンでチェック</title>
+<meta name="theme-color" content="#2149D1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ペンでチェック">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+  /* Layout: 1カラムの大きなチェック行。iPadの縦横どちらでも中央に収まり、ペン先で押しやすい高さを確保 */
+  :root {
+    --bg: #F2F4F7;
+    --surface: #FFFFFF;
+    --fg: #172033;
+    --muted: #667187;
+    --line: #D6DCE6;
+    --accent: #2149D1;
+    --accent-fg: #FFFFFF;
+    --done-bg: #EDF2FF;
+    --danger: #C23B3B;
+    --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, -apple-system, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0F1420; --surface: #182030; --fg: #E8ECF4; --muted: #96A3BB; --line: #2B3649;
+      --accent: #7B97FF; --accent-fg: #0F1420; --done-bg: #1A2744; --danger: #FF8D8D;
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 20px;
+    line-height: 1.5;
+    padding-top: calc(28px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  header { display: flex; flex-direction: column; gap: 12px; }
+  .head-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-weight: 700; font-size: 32px; line-height: 1.25; margin: 0; text-wrap: balance; }
+  .count { font-weight: 700; font-size: 28px; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .count small { font-size: 18px; color: var(--muted); font-weight: 500; }
+  .bar { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .25s ease; }
+  .note { margin: 0; font-size: 15px; color: var(--muted); }
+
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  li { display: flex; gap: 8px; align-items: stretch; min-width: 0; }
+  .row {
+    flex: 1; min-width: 0; min-height: 68px;
+    display: flex; align-items: center; gap: 18px;
+    padding: 12px 18px;
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    text-align: left;
+    user-select: none; -webkit-user-select: none;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .row:active { border-color: var(--accent); }
+  .row[aria-checked="true"] { background: var(--done-bg); border-color: transparent; }
+  .box {
+    flex: none; width: 44px; height: 44px; border-radius: 10px;
+    border: 2.5px solid var(--muted);
+    display: grid; place-items: center;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .box svg { width: 28px; height: 28px; }
+  .box path { fill: none; stroke: var(--accent-fg); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 30; stroke-dashoffset: 30; transition: stroke-dashoffset .22s ease .03s; }
+  .row[aria-checked="true"] .box { background: var(--accent); border-color: var(--accent); }
+  .row[aria-checked="true"] .box path { stroke-dashoffset: 0; }
+  .label { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
+  .row[aria-checked="true"] .label { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 2px; }
+
+  .del {
+    flex: none; width: 68px; border-radius: 14px; border: 1.5px solid var(--line);
+    background: var(--surface); color: var(--danger); font-size: 26px; line-height: 1;
+  }
+  .empty { padding: 28px 18px; text-align: center; color: var(--muted); border: 1.5px dashed var(--line); border-radius: 14px; display: block; }
+
+  form { display: flex; gap: 10px; }
+  input[type="text"] {
+    flex: 1; min-width: 0; min-height: 64px; padding: 10px 16px;
+    font: inherit; font-size: 20px; color: var(--fg);
+    background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px;
+  }
+  input::placeholder { color: var(--muted); }
+  .btn {
+    min-height: 64px; padding: 10px 22px; border-radius: 14px;
+    border: 1.5px solid var(--line); background: var(--surface); font-weight: 700; font-size: 18px;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  .tools { display: flex; gap: 10px; flex-wrap: wrap; }
+  .tools .btn { flex: 1 1 160px; }
+  .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .btn.warn { border-color: var(--danger); color: var(--danger); }
+  #status { margin: 0; min-height: 1.5em; font-size: 14px; color: var(--muted); text-align: center; }
+
+  @media (max-width: 480px) { body { font-size: 18px; } h1 { font-size: 26px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="head-row">
+      <h1>出かける前の確認</h1>
+      <div class="count" id="count" aria-live="polite"></div>
+    </div>
+    <div class="bar" aria-hidden="true"><i id="fill"></i></div>
+    <p class="note">サンプルの項目です。下の欄に書き足したり、「編集」で消したりして自分用に変えられます。</p>
+  </header>
+
+  <ul id="list"></ul>
+
+  <form id="add" autocomplete="off">
+    <input type="text" id="newItem" placeholder="項目を追加(ペンで手書きもできます)" enterkeyhint="done" aria-label="追加する項目">
+    <button class="btn primary" type="submit">追加</button>
+  </form>
+
+  <div class="tools">
+    <button class="btn" type="button" id="editBtn" aria-pressed="false">編集</button>
+    <button class="btn" type="button" id="resetBtn">すべて外す</button>
+    <button class="btn" type="button" id="saveBtn">Excelで保存</button>
+  </div>
+  <p id="status" role="status"></p>
+</div>
+
+<script>
+(function () {
+  var LS_KEY = "pen-checklist-v1";
+  var SAMPLE = ["財布", "スマホと充電器", "鍵", "窓の戸締まり", "ガスの元栓", "電気を消す", "天気を見て傘"];
+  var state = { items: SAMPLE.map(function (t, i) { return { id: "s" + i, t: t, done: false }; }) };
+  var editing = false, resetTimer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var listEl = $("list"), countEl = $("count"), fillEl = $("fill"), statusEl = $("status");
+  var editBtn = $("editBtn"), resetBtn = $("resetBtn"), saveBtn = $("saveBtn"), input = $("newItem");
+
+  function uid() { return "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function say(msg) { statusEl.textContent = msg; }
+  function clean(arr) {
+    return arr.filter(function (x) { return x && typeof x.t === "string"; })
+      .map(function (x) { return { id: String(x.id || uid()), t: x.t.slice(0, 200), done: !!x.done }; });
+  }
+
+  try {
+    var saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+    if (saved && Array.isArray(saved.items)) state.items = clean(saved.items);
+  } catch (e) {}
+
+  function persist() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ items: state.items })); }
+    catch (e) { say("この端末に保存できませんでした"); }
+  }
+
+  var CHECK = '<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 15l6 6 12-14"/></svg>';
+
+  function render() {
+    listEl.textContent = "";
+    if (!state.items.length) {
+      var e = document.createElement("li");
+      e.className = "empty";
+      e.textContent = "項目がありません。下の欄から追加してください。";
+      listEl.appendChild(e);
+    }
+    state.items.forEach(function (it) {
+      var li = document.createElement("li");
+      var row = document.createElement("button");
+      row.type = "button"; row.className = "row";
+      row.setAttribute("role", "checkbox");
+      row.setAttribute("aria-checked", it.done ? "true" : "false");
+      row.innerHTML = '<span class="box">' + CHECK + '</span><span class="label"></span>';
+      row.querySelector(".label").textContent = it.t;
+      row.addEventListener("click", function () {
+        it.done = !it.done;
+        row.setAttribute("aria-checked", it.done ? "true" : "false");
+        updateCount(); persist();
+      });
+      li.appendChild(row);
+      if (editing) {
+        var del = document.createElement("button");
+        del.type = "button"; del.className = "del";
+        del.setAttribute("aria-label", it.t + " を削除");
+        del.textContent = "✕";
+        del.addEventListener("click", function () {
+          state.items = state.items.filter(function (x) { return x.id !== it.id; });
+          render(); persist();
+        });
+        li.appendChild(del);
+      }
+      listEl.appendChild(li);
+    });
+    updateCount();
+  }
+
+  function updateCount() {
+    var total = state.items.length;
+    var done = state.items.filter(function (x) { return x.done; }).length;
+    countEl.innerHTML = done + ' <small>/ ' + total + '</small>';
+    fillEl.style.width = (total ? (done / total) * 100 : 0) + "%";
+  }
+
+  $("add").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var t = input.value.trim();
+    if (!t) return;
+    state.items.push({ id: uid(), t: t.slice(0, 200), done: false });
+    input.value = "";
+    render(); persist();
+    input.focus();
+  });
+
+  editBtn.addEventListener("click", function () {
+    editing = !editing;
+    editBtn.setAttribute("aria-pressed", editing ? "true" : "false");
+    editBtn.textContent = editing ? "編集を終わる" : "編集";
+    render();
+  });
+
+  resetBtn.addEventListener("click", function () {
+    if (resetBtn.classList.contains("warn")) {
+      clearTimeout(resetTimer);
+      resetBtn.classList.remove("warn"); resetBtn.textContent = "すべて外す";
+      state.items.forEach(function (x) { x.done = false; });
+      render(); persist();
+      return;
+    }
+    resetBtn.classList.add("warn"); resetBtn.textContent = "もう一度タップで外す";
+    resetTimer = setTimeout(function () {
+      resetBtn.classList.remove("warn"); resetBtn.textContent = "すべて外す";
+    }, 3500);
+  });
+
+  /* ---------- Excel(.xlsx)書き出し: 外部ライブラリなし。無圧縮のzipを自前で組み立てる ---------- */
+  var crcTable = (function () {
+    var t = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) c = crcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zipStore(files) {
+    var enc = new TextEncoder(), parts = [], central = [], offset = 0;
+    files.forEach(function (f) {
+      var name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data);
+      var lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+      lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0x21, true);
+      lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+      lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      var ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true); ch.setUint16(12, 0, true); ch.setUint16(14, 0x21, true);
+      ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+      ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+      parts.push(new Uint8Array(lh.buffer), name, data);
+      central.push(new Uint8Array(ch.buffer), name);
+      offset += 30 + name.length + data.length;
+    });
+    var cdSize = central.reduce(function (s, p) { return s + p.length; }, 0);
+    var end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true);
+    end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    return new Blob(parts.concat(central, [new Uint8Array(end.buffer)]),
+      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; })
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+  }
+  function buildXlsx() {
+    var rows = [["完了", "項目"]].concat(state.items.map(function (x) { return [x.done ? "☑" : "☐", x.t]; }));
+    var longest = state.items.reduce(function (m, x) { return Math.max(m, x.t.length); }, 4);
+    var width = Math.min(60, longest * 2 + 4);
+    var sheet = rows.map(function (r, i) {
+      return '<row r="' + (i + 1) + '">' + r.map(function (v, j) {
+        return '<c r="' + "AB"[j] + (i + 1) + '" t="inlineStr"><is><t xml:space="preserve">' + esc(v) + '</t></is></c>';
+      }).join("") + '</row>';
+    }).join("");
+    var X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    return zipStore([
+      { name: "[Content_Types].xml", text: X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' },
+      { name: "_rels/.rels", text: X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: "xl/workbook.xml", text: X + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="チェックリスト" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+      { name: "xl/_rels/workbook.xml.rels", text: X + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
+      { name: "xl/worksheets/sheet1.xml", text: X + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="' + width + '" customWidth="1"/></cols><sheetData>' + sheet + '</sheetData></worksheet>' }
+    ]);
+  }
+  function stamp() {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, "0"); };
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
+  }
+  saveBtn.addEventListener("click", async function () {
+    if (!state.items.length) { say("保存する項目がありません"); return; }
+    var name = "チェックリスト-" + stamp() + ".xlsx";
+    var blob = buildXlsx();
+    try {
+      var file = new File([blob], name, { type: blob.type });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        say("共有メニューから「ファイルに保存」を選べます");
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") { say("保存をキャンセルしました"); return; }
+    }
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+    say("Excelファイルを保存しました");
+  });
+
+  render();
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+})();
+</script>
+</body>
+</html>
